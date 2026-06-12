@@ -315,9 +315,11 @@ class Scenario(BaseModel):
     scenario_id: str = Field(min_length=1)
     testbed: str = Field(min_length=1, description="Testbed identifier")
     vocab_version: str = Field(
-        min_length=1,
+        pattern=r"^[a-z][a-z0-9_]*-\d+\.\d+\.\d+(?:\+[a-z][a-z0-9_]*-\d+\.\d+\.\d+)*$",
         description="Vocabulary version declaration: "
-        "'core-<semver>[+<extension>-<semver>]', e.g. 'core-0.1.0+ecom-0.1.0'",
+        "'core-<semver>[+<extension>-<semver>]', e.g. 'core-0.1.0+ecom-0.1.0'. "
+        "Profile-bound models pin this to exactly the bound profile's "
+        "vocab_version",
     )
     segmentation_gap_seconds: float | None = Field(
         default=None,

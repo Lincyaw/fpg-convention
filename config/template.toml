@@ -1,8 +1,10 @@
 # ============================================================================
 # Vocabulary profile TEMPLATE — copy to config/<your-system>.toml and fill.
 #
-# One file per system. It declares the system's full vocabulary: node
-# predicates, edge mechanisms, and entity types. Load it explicitly:
+# One file per system. It declares the system's FULL vocabulary: node
+# predicates, edge mechanisms, and entity types (all three are required —
+# the generated models constrain predicate/mechanism values and entity-ref
+# prefixes to exactly what is declared here). Load it explicitly:
 #
 #     from fpg import build_schema, load_profile
 #     schema = build_schema(load_profile("config/<your-system>.toml"))
@@ -10,9 +12,12 @@
 # All vocabulary values (the part after the dot in section headers) must be
 # lowercase snake_case. "other" is reserved — the factory injects it into
 # every generated enum as the escape hatch.
+#
+# The entries below are realistic microservice-flavored examples with every
+# fillable field filled in; replace them with your system's own vocabulary.
 # ============================================================================
 
-# --- header (all three required) --------------------------------------------
+# --- header (all three fields required) --------------------------------------
 
 # Profile name, lowercase snake_case. Appears in vocab_version.
 name = "template"
@@ -21,37 +26,64 @@ name = "template"
 #   MINOR = entry added or promoted to stable; MAJOR = entry removed.
 version = "0.1.0"
 
-# "core" = compose on the (empty) core profile — the normal case; the
+# "core" = attach to the (empty) core version lineage — the normal case; the
 #          resulting vocab_version reads "core-0.1.0+<name>-<version>".
 # "none" = fully self-contained profile, no lineage.
 extends = "core"
 
-# --- node predicates ---------------------------------------------------------
+# --- node predicates ----------------------------------------------------------
 # Failure modes a node's subject entity can exhibit (what is broken).
 # Noun phrases; name the failure mode itself, not its cause or consequence.
+# Fields: brief (required), stability, since, renamed_to (all optional).
 
-[node_predicates.example_predicate]
-brief = "REQUIRED. One-line meaning of this failure mode"
-stability = "experimental"   # optional: experimental (default) | stable | deprecated
-since = "0.1.0"              # optional: profile version that introduced this entry
-# renamed_to = "new_value"   # optional: set only when stability = "deprecated"
+[node_predicates.latency_degradation]
+brief = "Request latency degraded (e.g. p99 well above baseline)"  # required
+stability = "stable"      # experimental (default) | stable | deprecated
+since = "0.1.0"           # profile version that introduced this entry
 
-# --- edge mechanisms ---------------------------------------------------------
+[node_predicates.connection_pool_exhausted]
+brief = "Connection pool fully occupied; new requests wait or fail"
+stability = "experimental"
+since = "0.1.0"
+
+# A deprecated entry: kept for at least one MINOR release after renaming,
+# removed at the next MAJOR. renamed_to is set only with stability = "deprecated".
+[node_predicates.db_pool_full]
+brief = "Old name of connection_pool_exhausted, kept for migration"
+stability = "deprecated"
+since = "0.1.0"
+renamed_to = "connection_pool_exhausted"
+
+# --- edge mechanisms ----------------------------------------------------------
 # Propagation channel behaviors (how badness transfers between entities).
 # Same fields as node predicates.
 
-[edge_mechanisms.example_mechanism]
-brief = "REQUIRED. One-line meaning of this propagation mechanism"
+[edge_mechanisms.sync_call_blocking]
+brief = "Slow downstream blocks the caller through synchronous calls"
+stability = "stable"
+since = "0.1.0"
+
+[edge_mechanisms.retry_amplification]
+brief = "Client retries multiply load on an already degraded service"
 stability = "experimental"
 since = "0.1.0"
 
-# --- entity types -------------------------------------------------------------
-# Entity-type prefixes usable in subject/target_entity refs "<prefix>:<name>".
+# --- entity types ---------------------------------------------------------------
+# Entity-type prefixes usable in subject/target_entity refs "<prefix>:<name>",
+# e.g. "svc:checkout", "pod:order-7d9f-2".
+# Generated models accept ONLY prefixes declared here (enum-like).
+# Fields: brief (required), stability, since, parent (all optional).
 
-[entity_types.example_type]
-brief = "REQUIRED. What kind of thing this prefix denotes"
-stability = "experimental"
+[entity_types.svc]
+brief = "A logical service (e.g. svc:checkout)"
+stability = "stable"
 since = "0.1.0"
-# parent = "coarser_type"    # optional: next coarser-grained type
-                             # (e.g. task -> stage -> job), used by
-                             # granularity-decay scoring
+
+[entity_types.pod]
+brief = "One running instance of a service (e.g. pod:order-7d9f-2)"
+stability = "stable"
+since = "0.1.0"
+parent = "svc"            # next coarser-grained type (pod -> svc): a model
+                          # that answers at svc granularity instead of the
+                          # exact pod gets partial credit via granularity
+                          # decay, not zero

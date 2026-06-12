@@ -1,10 +1,89 @@
 # Fault Propagation Graph (FPG) Schema
 
-Representation spec and code definitions for fault propagation graphs in fault-injection
-scenarios. The code is the spec: all structures, value spaces, and validation rules
-live in `src/fpg` as the single source of truth.
+Schema for representing how an injected fault propagates through a system. A fault
+injection experiment yields a ground-truth propagation graph: the injection point is
+the root cause, and the disturbance cascades along causal edges until it surfaces as
+SLO violations. These graphs form a dataset with verifiable ground truth, against
+which LLMs are evaluated on root cause analysis: given raw observation data, the model
+must reconstruct the propagation graph and nominate the root causes.
+
+The code is the spec: all structures, value spaces, and validation rules live in
+`src/fpg` as the single source of truth.
+
+## Design
+
+### Why a graph, and what a node is
+
+A fault rarely propagates as a chain: one cause fans out to several effects, and one
+effect may require several causes jointly (a trigger AND a standing weakness). So the
+ground truth is a graph whose nodes are **time-anchored, verifiable statements** —
+"entity `subject` exhibited failure mode `predicate` during `[start, end]`" — never
+free-form prose. Time anchoring is also what makes the graph a **DAG by construction**:
+a cause cannot start after its effect (enforced as a validation rule), and feedback
+loops are unrolled over time — the same `(subject, predicate)` recurring later becomes
+a new node, never a back-edge. **Root causes are exactly the source nodes** (no
+incoming edges): injection points plus preconditions.
+
+### Three node kinds
+
+The discriminated union on `kind` exists because the three kinds have genuinely
+different shapes, not just different labels:
+
+- **`event`** — something that happened on a real entity during the fault window
+  (good or bad, instantaneous or sustained). Fully grounded: subject, predicate,
+  time, evidence.
+- **`precondition`** — a standing weakness that existed *before* the fault and
+  enabled it (undersized pool, missing timeout). The axis that separates it from
+  `event` is **causal origin, not duration**: it was already there at injection time,
+  so it can never be caused by this fault — structurally, it has no incoming edges.
+  The typical pattern is "trigger event AND precondition → effect".
+- **`gate`** — a pure boolean connector for mixed expressions like `(A AND B) OR C`,
+  which a single per-node `combine` (AND/OR over all in-edges) cannot express. It is
+  not a statement about the system, so it carries no subject, time, or evidence.
+
+### Every node must be verifiable
+
+A dataset claim that cannot be re-checked is an opinion. Each node is either
+**`observed`** — it must carry re-executable evidence (a query anyone can re-run, see
+[Evidence re-execution](#evidence-re-execution)) — or **`latent`** — a real link in
+the causal chain that monitoring did not capture; it requires human annotation and is
+exempt from recall penalties at evaluation time, so unobservable truth never punishes
+the model. Edges carry a verification level for the same reason: `interventional`
+(reproduced across repeated injections — the gold standard) or `consistency-checked`
+(passed temporal + topological + mechanism checks).
+
+Scenarios also embed **isolated distractors**: real, benign perturbations that are
+causally unrelated to the fault. They stay in the graph at degree 0; a model that
+wires them into its answer pays the precision penalty. This tests the ability to
+reject plausible-but-irrelevant signals, not just to find the true chain.
+
+## Model output contract
+
+`ModelRCAOutput` is deliberately *smaller* than the ground-truth schema — each
+asymmetry is a decision about what can be fairly graded:
+
+- **Edges are `(src, dst)` only.** Edge *existence and direction* are objective
+  (time order, topology, replay); the *mechanism label* is annotation-side judgment,
+  so the model is not asked to produce it.
+- **Evidence citation is mandatory** for every node (`hypothesis: true` excepted).
+  A hallucinated node cites evidence that does not exist or does not support the
+  predicate, and is auto-falsified by re-running the query — the contract makes
+  hallucination self-defeating.
+- **`hypothesis` nodes** let the model flag unverifiable guesses honestly: they match
+  ground-truth `latent` nodes for bonus credit and carry no penalty otherwise.
+- **`root_causes` must be stated explicitly**, never inferred from graph sources — a
+  missed edge would otherwise fabricate false roots.
+- **DAG-ness is not hard-enforced on model output**: a cycle should cost edge scores,
+  not reject the whole answer (`find_cycle_nodes()` lets the harness pick its
+  degradation policy). Validation rejects only what makes grading impossible.
 
 ## Architecture: invariant structural layer + variable vocabulary layer
+
+Testbeds are heterogeneous: a microservice system fails differently from a batch
+system, so node predicates, edge mechanisms, and entity types cannot be one global
+enum. What *is* common to every system is the shape of the graph and its rules. The
+schema therefore splits along exactly that line — structure is code, vocabularies are
+per-system config; adding a system means writing one TOML file, never touching code:
 
 ```
 Invariant (structural layer, core code)            Variable (vocabulary layer, one profile per system)
@@ -49,7 +128,6 @@ src/fpg/                          Core package: structural definitions only (sin
   model_output.py                 Structural-layer model output contract (output structure for evaluated models)
 config/                           Per-system vocabulary config files (conventional location, one per system)
   template.toml                   Template documenting every available field; copy and rename to use
-docs/                             Documentation
 ```
 
 JSON Schema is not maintained on disk; generate it at runtime when needed:
@@ -142,11 +220,14 @@ mechanism (registry + entry point discovery) and carries no data; the entry poin
 (`[project.entry-points."fpg.entity_types"]`) remains as a supplementary
 "install-to-register" channel.
 
-Validation is two-tiered: `EntityRef`'s structural check only verifies the
-`<prefix>:<name>` format (schema validation does not depend on which extensions are
-installed); whether a prefix is registered is a strict-tier check, performed by
-downstream tooling via `schema.entity_registry.unregistered_prefixes(refs)`. Entity
-**instances** (which concrete services exist) are testbed data and stay out of the schema.
+Validation is two-tiered, same as predicates/mechanisms: the structural `EntityRef`
+only checks the `<prefix>:<name>` format, while the **profile-bound models constrain
+the prefix, enum-like, to the entity types the profile declares** (the factory
+generates a `^(svc|pod|…):` pattern for `subject` / `target_entity`; an undeclared
+prefix fails validation). The registry remains for granularity lookups
+(`ancestors()`, used by scoring decay) and for auditing structural-layer data
+(`unregistered_prefixes(refs)`). Entity **instances** (which concrete services exist)
+are testbed data and stay out of the schema.
 
 ## Evidence re-execution
 
@@ -179,10 +260,10 @@ the result against `explanation`. For example:
 | `node.combine` | `AND \| OR` (required when in-edges ≥ 2) (invariant) | `vocab.Combine` |
 | `node.annotation` | `auto \| human \| replay-verified` (invariant) | `vocab.AnnotationSource` |
 | `edge.verification` | `interventional \| consistency-checked` (invariant) | `vocab.VerificationLevel` |
-| `*.subject` / `target_entity` | `<prefix>:<name>`, where prefix = an entity type declared by the system profile (open set) | `types.EntityRef` + `entities` |
+| `*.subject` / `target_entity` | `<prefix>:<name>`; in profile-bound models the prefix is constrained, enum-like, to the profile's declared entity types; structural layer checks the format only | `types.EntityRef`; binding: `factory.build_schema` |
 | `*.time` | `[start, end]` ISO 8601 interval; instantaneous events have start == end | `types.TimeInterval` |
-| `scenario.schema_version` | semver (`^\d+\.\d+\.\d+$`) | `scenario.Scenario` |
-| `scenario.vocab_version` | `core-<semver>[+<system>-<semver>]` = `profile.vocab_version` | `profile.VocabProfile` |
+| `scenario.schema_version` | semver; profile-bound models pin it to exactly the current `SCHEMA_VERSION` | `scenario.Scenario`; binding: `factory.build_schema` |
+| `scenario.vocab_version` | `core-<semver>[+<system>-<semver>]`; profile-bound models pin it to exactly the bound profile's `vocab_version` | `profile.VocabProfile`; binding: `factory.build_schema` |
 | `injection.fault_type` | Free-form string (value space = the injection tool's fault catalog; no enum enforced) | `scenario.Injection` |
 
 Structural constraints beyond the enums (DAG, preconditions have no in-edges, time
