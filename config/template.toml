@@ -1,0 +1,57 @@
+# ============================================================================
+# Vocabulary profile TEMPLATE — copy to config/<your-system>.toml and fill.
+#
+# One file per system. It declares the system's full vocabulary: node
+# predicates, edge mechanisms, and entity types. Load it explicitly:
+#
+#     from fpg import build_schema, load_profile
+#     schema = build_schema(load_profile("config/<your-system>.toml"))
+#
+# All vocabulary values (the part after the dot in section headers) must be
+# lowercase snake_case. "other" is reserved — the factory injects it into
+# every generated enum as the escape hatch.
+# ============================================================================
+
+# --- header (all three required) --------------------------------------------
+
+# Profile name, lowercase snake_case. Appears in vocab_version.
+name = "template"
+
+# Profile semver, bumped independently of the schema version:
+#   MINOR = entry added or promoted to stable; MAJOR = entry removed.
+version = "0.1.0"
+
+# "core" = compose on the (empty) core profile — the normal case; the
+#          resulting vocab_version reads "core-0.1.0+<name>-<version>".
+# "none" = fully self-contained profile, no lineage.
+extends = "core"
+
+# --- node predicates ---------------------------------------------------------
+# Failure modes a node's subject entity can exhibit (what is broken).
+# Noun phrases; name the failure mode itself, not its cause or consequence.
+
+[node_predicates.example_predicate]
+brief = "REQUIRED. One-line meaning of this failure mode"
+stability = "experimental"   # optional: experimental (default) | stable | deprecated
+since = "0.1.0"              # optional: profile version that introduced this entry
+# renamed_to = "new_value"   # optional: set only when stability = "deprecated"
+
+# --- edge mechanisms ---------------------------------------------------------
+# Propagation channel behaviors (how badness transfers between entities).
+# Same fields as node predicates.
+
+[edge_mechanisms.example_mechanism]
+brief = "REQUIRED. One-line meaning of this propagation mechanism"
+stability = "experimental"
+since = "0.1.0"
+
+# --- entity types -------------------------------------------------------------
+# Entity-type prefixes usable in subject/target_entity refs "<prefix>:<name>".
+
+[entity_types.example_type]
+brief = "REQUIRED. What kind of thing this prefix denotes"
+stability = "experimental"
+since = "0.1.0"
+# parent = "coarser_type"    # optional: next coarser-grained type
+                             # (e.g. task -> stage -> job), used by
+                             # granularity-decay scoring

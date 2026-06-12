@@ -1,0 +1,19 @@
+[project]
+name = "fpg"
+version = "0.1.0"
+description = "Fault Propagation Graph schema: ground-truth scenario structure and model output contract"
+readme = { text = "Fault Propagation Graph schema: structural models (scenario ground truth + model output contract) plus per-system vocabulary profiles bound via a factory.", content-type = "text/markdown" }
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "pyyaml>=6",
+]
+
+[build-system]
+requires = ["uv_build>=0.10,<0.11"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.17",
+]

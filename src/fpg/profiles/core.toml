@@ -1,0 +1,9 @@
+# The core profile. Intentionally EMPTY: it carries no vocabulary.
+# Every system defines its own node predicates, edge mechanisms, and
+# entity types in its own profile file ('extends = "core"', see
+# config/template.toml in the repository). Core only anchors the
+# version lineage: a system's vocab_version reads "core-0.1.0+<system>-<ver>".
+
+name = "core"
+version = "0.1.0"
+extends = "none"
