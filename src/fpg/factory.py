@@ -148,7 +148,10 @@ def build_schema(profile: VocabProfile) -> SchemaBundle:
         "Graph",
         __base__=sc.Graph,
         nodes=(list[node_union], Field(min_length=1)),
-        edges=(list[edge], Field(default_factory=list)),  # ty: ignore[invalid-type-form]
+        edges=(
+            list[edge],  # type: ignore[valid-type]  # runtime Pydantic model
+            Field(default_factory=list),
+        ),
     )
     injection = create_model(
         "Injection", __base__=sc.Injection, target_entity=(entity_ref, ...)
@@ -174,7 +177,10 @@ def build_schema(profile: VocabProfile) -> SchemaBundle:
                 "vocabulary this bundle binds",
             ),
         ),
-        injections=(list[injection], Field(min_length=1)),  # ty: ignore[invalid-type-form]
+        injections=(
+            list[injection],  # type: ignore[valid-type]  # runtime Pydantic model
+            Field(min_length=1),
+        ),
         graph=(graph, ...),
     )
 
@@ -187,7 +193,10 @@ def build_schema(profile: VocabProfile) -> SchemaBundle:
     model_output = create_model(
         "ModelRCAOutput",
         __base__=mo.ModelRCAOutput,
-        nodes=(list[model_node], Field(min_length=1)),  # ty: ignore[invalid-type-form]
+        nodes=(
+            list[model_node],  # type: ignore[valid-type]  # runtime Pydantic model
+            Field(min_length=1),
+        ),
     )
 
     registry = EntityTypeRegistry(profile.entity_type_objects())

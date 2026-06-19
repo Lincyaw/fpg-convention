@@ -221,7 +221,12 @@ class Graph(BaseModel):
         by_id = {n.id: n for n in self.nodes}
         if len(by_id) != len(self.nodes):
             seen: set[str] = set()
-            dup = next(n.id for n in self.nodes if n.id in seen or seen.add(n.id))
+            dup = ""
+            for node in self.nodes:
+                if node.id in seen:
+                    dup = node.id
+                    break
+                seen.add(node.id)
             raise ValueError(f"duplicate node id {dup!r}")
 
         in_deg: dict[str, int] = defaultdict(int)

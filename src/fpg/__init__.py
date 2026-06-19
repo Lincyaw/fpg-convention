@@ -41,6 +41,7 @@ Module layout:
 """
 
 from .entities import EntityType, EntityTypeRegistry
+from .evaluation import GraphComparison, MatchMetrics, compare_model_to_ground_truth
 from .factory import SchemaBundle, build_schema
 from .model_output import ModelNode, ModelRCAOutput
 from .profile import CORE_PROFILE, EntityTypeSpec, VocabProfile, load_profile
@@ -87,6 +88,10 @@ __all__ = [
     # entities (registry mechanism; data lives in profiles)
     "EntityType",
     "EntityTypeRegistry",
+    # evaluation
+    "MatchMetrics",
+    "GraphComparison",
+    "compare_model_to_ground_truth",
     # types
     "EntityRef",
     "TimeInterval",

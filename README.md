@@ -209,6 +209,45 @@ scenario.graph.root_causes        # root causes = nodes with no in-edges (inject
 answer = ModelRCAOutput.model_validate_json(raw_model_answer)
 ```
 
+## Comparing model output to ground truth
+
+`fpg.evaluation` provides a deterministic structural comparison helper for
+eval harnesses:
+
+```python
+from fpg import ModelRCAOutput, Scenario, compare_model_to_ground_truth
+
+scenario = Scenario.model_validate_json(open("causal_graph_verified.json").read())
+answer = ModelRCAOutput.model_validate_json(raw_model_answer)
+comparison = compare_model_to_ground_truth(answer, scenario)
+
+comparison.root_subjects.f1  # root entity match, predicate-agnostic
+comparison.subjects.f1       # affected entity match, predicate-agnostic
+comparison.soft_subject_edges.f1  # entity edge match with contracted-path decay
+comparison.root_nodes.f1     # exact (subject, predicate) root match diagnostic
+comparison.nodes.f1          # exact (subject, predicate) node match diagnostic
+comparison.soft_edges.f1     # exact edge match with contracted-path decay diagnostic
+comparison.subject_path_match_hit  # at least one full entity path matched
+comparison.subject_path_reachability_hit # root/symptom entities connected in both graphs
+comparison.missing_edges     # readable labels for diagnostics
+```
+
+The helper's default scalar score is predicate-agnostic: `0.4 *
+root_subject_f1 + 0.3 * subject_f1 + 0.3 * soft_subject_edge_f1`. Predicate-exact
+node/edge/path metrics are still reported as diagnostics, but they do not affect
+the score. This keeps RCA evaluation focused on whether the model found the
+right affected entities and propagation chain even when the ground-truth
+predicate label is underspecified or uses a different anomaly taxonomy.
+
+Ground-truth gate nodes are collapsed because `ModelRCAOutput` has no gate node
+type. Terminal symptoms are non-gate, non-isolated grounded nodes that have
+incoming causes and no outgoing grounded effects. Paths are enumerated from root
+causes to those terminal symptoms; reading the same result backward gives the
+RCA-style "can this symptom trace back to this root?" reachability check. Path
+hits are reported as diagnostics rather than folded into the scalar score. The
+helper does not score time overlap or re-execute evidence; those checks can be
+layered by a benchmark-specific harness.
+
 ## Entity type extension
 
 Entity **types** (prefixes) form an open set, and **all the data lives in profiles**
